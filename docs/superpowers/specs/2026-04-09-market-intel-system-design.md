@@ -175,7 +175,7 @@ URL 일치만 체크. 내용 기반 dedup은 분석 모델에 위임.
 
 ### 4.2 소스 평판 등급
 
-```yaml
+```
 tier_1 (0.9): Reuters, IEEE Spectrum, Nature, Science Robotics
 tier_2 (0.7): TechCrunch, The Robot Report, 기업 공식 블로그
 tier_3 (0.5): Reddit, HackerNews, 개인 블로그
@@ -414,22 +414,18 @@ keywords:
 
 ```yaml
 tiers:
-  tier_1:  # score: 0.9
-    - Reuters
-    - IEEE Spectrum
-    - Nature
-    - Science Robotics
-  tier_2:  # score: 0.7
-    - TechCrunch
-    - The Robot Report
-    - 기업 공식 블로그
-  tier_3:  # score: 0.5
-    - Reddit
-    - HackerNews
-    - 개인 블로그
-  tier_4:  # score: 0.3
-    - X/Twitter
-    - 출처 불명
+  tier_1:
+    score: 0.9
+    sources: ["Reuters", "IEEE Spectrum", "Nature"]
+  tier_2:
+    score: 0.7
+    sources: ["TechCrunch", "The Robot Report"]
+  tier_3:
+    score: 0.5
+    sources: ["Reddit", "HackerNews"]
+  tier_4:
+    score: 0.3
+    sources: ["X/Twitter"]
 ```
 
 ---
@@ -509,7 +505,8 @@ market_intel/
 │   │   └── session.py      # 세션/Checkpoint 관리
 │   ├── writer/             # Obsidian Writer
 │   ├── refinery/           # 주간 정제 파이프라인
-│   └── config.yaml
+│
+├── config.yaml
 │
 ├── vault/                  # Obsidian Vault
 │   ├── companies/
