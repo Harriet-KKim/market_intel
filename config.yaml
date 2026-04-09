@@ -1,0 +1,18 @@
+vault_path: "./vault"
+collection:
+  interval_hours: 6
+  sources:
+    rss: true
+    web: true
+    sns: true
+    youtube: true
+refinery:
+  schedule_day: "monday"
+  schedule_hour: 9
+api_keys:
+  gemini: "${GEMINI_API_KEY}"
+  openai: "${OPENAI_API_KEY}"
+  anthropic: "${ANTHROPIC_API_KEY}"
+budget:
+  enabled: false
+  daily_limit_usd: 10.0

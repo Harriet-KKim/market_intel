@@ -1,0 +1,26 @@
+[project]
+name = "market-intel"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "feedparser>=6.0",
+    "yt-dlp>=2024.0",
+    "python-frontmatter>=1.1",
+    "pyyaml>=6.0",
+    "apscheduler>=3.10",
+    "google-genai>=1.0",
+    "openai>=1.50",
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
