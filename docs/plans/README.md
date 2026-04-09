@@ -152,16 +152,18 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 
 ### 알려진 한계 (Not Fixed — 구현·운영 중 주의)
 
-다음 항목들은 "당장의 실행을 막진 않지만" 운영 단계에서 수면 위로 올라올 가능성이 있는 이슈입니다. 현 리뷰 사이클에서는 **의도적으로 손대지 않았고**, 실제로 문제가 관측될 때 패치 판단을 내리세요. ID는 `L#` 접두사로 구분합니다(Limit).
+다음 항목들은 "당장의 실행을 막진 않지만" 구현 또는 운영 규모가 커질수록 수면 위로 올라올 가능성이 있는 백로그입니다. 현 리뷰 사이클에서는 **의도적으로 손대지 않았고**, 실제로 트리거가 관측될 때 패치 판단을 내리세요. ID는 `L#` 접두사로 구분합니다(Limit). 이 표가 구현 레벨 백로그의 정본입니다.
 
-| ID | 위치 | 한계 | 관측 시 대응 |
-|----|------|------|--------------|
-| L1 | `09-refinery.md` Task 16 `Summarizer` + `ProfileWriter.update_company/update_topic` | Summarizer가 매 주 `company_updates[name]` 키에 **전체 본문 Markdown**을 내려보내고 ProfileWriter가 그대로 덮어씀 → 사용자가 Obsidian에서 수동 편집한 내용이 주간 실행마다 손실될 수 있음 | 섹션별 append/merge 전략으로 전환하거나, Summarizer에게 "기존 본문을 인자로 받고 부분 patch만 반환하라"는 스키마로 변경 |
-| L2 | `09-refinery.md` Task 15 `Consolidator._read_raw_data` | 범위 필터는 적용되지만(I5) 필터 내부 raw는 여전히 **전량**이 단일 프롬프트로 전송 → raw 볼륨이 커지면 GPT5 Pro 토큰 한도 초과 | `max_chars_per_article` · `max_total_chars` 파라미터 추가, 또는 회사/주제별 사전 그룹핑 후 chunk 단위로 호출 |
-| L3 | `10-main.md` `main()` | `UrlDedup(Path("dedup.db"))`가 CWD에 상대 경로로 고정 → 다른 디렉터리에서 `python -m src.main`을 실행하면 새 DB가 생성되어 dedup이 초기화 | `config.yaml`에 `dedup.db_path` 키 신설, 기본값을 `vault_path / ".dedup.db"` 등 절대 경로로 지정 |
-| L4 | `05-writer.md` Task 8 `inject_wikilinks` | alias의 단어 경계 매칭이 정규식 수준으로 보장되지 않을 경우 다른 단어의 substring에 잘못 치환될 위험(예: alias "AI" → "AIR"에 매칭). 현 구현은 기본 문자열 교체 | 실제 오인 사례가 보이면 `re.escape` + `\b` 또는 유니코드 경계 + 케이스 민감 옵션으로 재작성 |
-| L5 | `08-scheduler.md` Task 14 `IntelScheduler` | APScheduler `BlockingScheduler()`가 타임존 인자 없이 생성됨 → 컨테이너/서버의 시스템 TZ에 따라 실제 실행 시각이 달라짐 | 명시 TZ(`ZoneInfo("Asia/Seoul")` 등)를 `config.yaml`로 주입 |
-| L6 | `08-scheduler.md` Task 14 YouTube 분기 | 현재는 `logger.info(f"YouTube channel check: {channel}")`만 찍고 실제 비디오 discovery 없음 — 스펙에도 "추후 확장"으로 기재 | 실제 필요해지면 yt-dlp `--flat-playlist` 또는 RSS(`feeds/videos.xml?channel_id=...`) 기반 discovery 구현 |
-| L7 | `07-collector.md` Task 13 `CollectionPipeline.process_item` | `dedup.mark_seen` → `raw_writer.write` 사이에 크래시가 나면 URL은 seen으로 찍혔는데 파일은 없는 inconsistent state → 이후 재실행 시 영구 누락 | `raw_writer.write` 성공 이후에만 `mark_seen`을 호출하도록 순서 변경(중복 파일 허용) 또는 SQLite `BEGIN IMMEDIATE`로 두 동작을 트랜잭션화 |
-| L8 | `09-refinery.md` Task 17 `RefinementPipeline.run` | 3-step 시퀀스 중 Step 3에서 실패하면 Step 1·2의 산출물은 이미 Vault에 기록된 상태로 전체 재실행이 필요 → 재시도 시 토큰 이중 소비 | `--resume-from` 플래그 또는 step별 idempotent skip 도입 |
-| L9 | `02-registry.md` + `05-writer.md` `ProfileWriter` | 프로필 파일 이름이 `companies/{company.name}.md` 기반인 반면 태깅/매칭은 `company.id` 기반으로 흐름이 섞여 있음 → alias/id/name 트리플이 어긋나면 Summarizer의 `company_updates` 키와 실제 파일이 1:1로 매칭되지 않을 수 있음 | 현재는 `name` 문자열이 유일 식별자로 통일돼 있다는 전제이므로 괜찮지만, 다국어 alias가 실제 파일명으로 쓰이기 시작하면 `id → path` 역인덱스를 `ProfileWriter`에 추가 |
+| ID | 위치 | 한계 | 트리거 | 계획된 대응 |
+|----|------|------|--------|-------------|
+| L1 | `09-refinery.md` Task 16 `Summarizer` + `05-writer.md` `ProfileWriter.update_company/update_topic` | Summarizer가 매 주 `company_updates[name]` / `topic_updates[name]` 키에 **전체 본문 Markdown**을 내려보내고 `ProfileWriter`가 그대로 덮어씀 → 사용자가 Obsidian에서 수동 편집한 내용이 주간 실행마다 손실될 수 있음 | 사용자가 회사/토픽 프로필을 수동 편집하기 시작할 때 | 섹션별 append/merge 전략으로 전환하거나, Summarizer에게 "기존 본문을 인자로 받고 부분 patch만 반환하라"는 스키마로 변경 |
+| L2 | `09-refinery.md` Task 15 `Consolidator._read_raw_data` | 범위 필터는 적용되지만(I5) 필터 내부 raw는 여전히 **전량**이 단일 프롬프트로 전송 → raw 볼륨이 커지면 GPT5 Pro 토큰 한도 초과 | 주간 raw 볼륨이 증가해 prompt 길이, 실행 시간, 비용이 눈에 띄게 커질 때 | `max_chars_per_article` · `max_total_chars` 파라미터 추가, 또는 회사/주제별 사전 그룹핑 후 chunk 단위로 호출 |
+| L3 | `10-main.md` `main()` | `UrlDedup(Path("dedup.db"))`가 CWD에 상대 경로로 고정 → 다른 디렉터리에서 `python -m src.main`을 실행하면 새 DB가 생성되어 dedup이 초기화 | repo root 외 위치에서 실행하거나 scheduler/service 환경으로 옮길 때 | `config.yaml`에 `dedup.db_path` 키 신설, 기본값을 `vault_path / ".dedup.db"` 등 절대 경로로 지정 |
+| L4 | `05-writer.md` Task 8 `inject_wikilinks` | alias의 단어 경계 매칭이 정규식 수준으로 보장되지 않을 경우 다른 단어의 substring에 잘못 치환될 위험(예: alias "AI" → "AIR"에 매칭). 현 구현은 기본 문자열 교체 | 실제 오인 링크 사례가 관측될 때 | `re.escape` + `\b` 또는 유니코드 경계 + 케이스 민감 옵션으로 재작성 |
+| L5 | `08-scheduler.md` Task 14 `IntelScheduler` | APScheduler `BlockingScheduler()`가 타임존 인자 없이 생성됨 → 컨테이너/서버의 시스템 TZ에 따라 실제 실행 시각이 달라짐 | 로컬이 아닌 서버/컨테이너에서 scheduler를 돌릴 때 | 명시 TZ(`ZoneInfo("Asia/Seoul")` 등)를 `config.yaml`로 주입 |
+| L6 | `08-scheduler.md` Task 14 YouTube 분기 | 현재는 `logger.info(f"YouTube channel check: {channel}")`만 찍고 실제 비디오 discovery 없음 — `sources.youtube`를 켜도 채널 수집은 동작하지 않음 | YouTube 채널을 실제 수집 소스로 운영할 때 | yt-dlp `--flat-playlist` 또는 RSS(`feeds/videos.xml?channel_id=...`) 기반 discovery 구현 |
+| L7 | `07-collector.md` Task 13 `CollectionPipeline.process_item` | `dedup.mark_seen` → `raw_writer.write` 사이에 크래시가 나면 URL은 seen으로 찍혔는데 파일은 없는 inconsistent state → 이후 재실행 시 영구 누락 | tagging/write 예외가 실제로 발생하기 시작할 때 | `raw_writer.write` 성공 이후에만 `mark_seen`을 호출하도록 순서 변경(중복 파일 허용) 또는 SQLite `BEGIN IMMEDIATE`로 두 동작을 트랜잭션화 |
+| L8 | `09-refinery.md` Task 17 `RefinementPipeline.run` | 3-step 시퀀스 중 Step 3에서 실패하면 Step 1·2의 산출물은 이미 Vault에 기록된 상태로 전체 재실행이 필요 → 재시도 시 토큰 이중 소비 | Step 3 실패 재시도가 실제 운영에서 반복될 때 | `--resume-from` 플래그 또는 step별 idempotent skip 도입 |
+| L9 | `02-registry.md` + `05-writer.md` `ProfileWriter` | 프로필 파일 이름이 `companies/{company.name}.md` 기반인 반면 태깅/매칭은 `company.id` 기반으로 흐름이 섞여 있음 → alias/id/name 트리플이 어긋나면 Summarizer의 `company_updates` 키와 실제 파일이 1:1로 매칭되지 않을 수 있음 | 다국어 alias나 rename이 늘어나 파일명/식별자 매핑이 흔들릴 때 | `id → path` 역인덱스를 `ProfileWriter`에 추가하고 update/read 경로를 `id` 기준으로 통일 |
+| L10 | `10-main.md` + `09-refinery.md` | 잘못된 `--date-range` 입력이 strict failure가 아니라 전체 raw 스캔으로 이어질 수 있음 | 운영자가 `refine --date-range`를 수동 입력해 실행하는 빈도가 늘 때 | CLI에서 `YYYY-MM-DD ~ YYYY-MM-DD` 형식을 선검증하고, `_parse_date_range`는 fallback 대신 명시적 오류를 반환하도록 변경 |
+| L11 | `09-refinery.md` Task 16 `Summarizer._read_current_profiles` | Summarizer가 모든 company/topic profile을 매주 프롬프트에 포함해 Step 2 토큰 사용량이 지속 증가함 | 회사/토픽 수 증가 또는 Step 2 prompt 크기/비용이 체감될 때 | 변경된 프로필만 주입하거나, profile을 chunk 단위로 나눠 summarization을 분리 |
