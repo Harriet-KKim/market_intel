@@ -53,3 +53,88 @@ def test_gateway_call_with_history():
     response = gateway.call_with_history("mock-model", messages=messages)
 
     assert response.content == "history: second"
+
+
+def test_gemini_adapter_call(monkeypatch):
+    from src.gateway.adapters.gemini import GeminiAdapter
+
+    class MockResponse:
+        text = "gemini response"
+        usage_metadata = type("Usage", (), {"prompt_token_count": 15, "candidates_token_count": 8})()
+
+    class MockModel:
+        def generate_content(self, contents, **kwargs):
+            return MockResponse()
+
+    class MockClient:
+        models = type("Models", (), {"generate_content": MockModel().generate_content})()
+
+    adapter = GeminiAdapter(client=MockClient(), model_id="gemini-2.0-flash")
+    response = adapter.call("test prompt")
+
+    assert response.content == "gemini response"
+    assert response.input_tokens == 15
+    assert response.output_tokens == 8
+
+
+def test_openai_adapter_call():
+    from src.gateway.adapters.openai import OpenAIAdapter
+
+    class MockMessage:
+        content = "gpt response"
+
+    class MockChoice:
+        message = MockMessage()
+
+    class MockUsage:
+        prompt_tokens = 20
+        completion_tokens = 12
+
+    class MockCompletion:
+        choices = [MockChoice()]
+        usage = MockUsage()
+
+    class MockChat:
+        class completions:
+            @staticmethod
+            def create(**kwargs):
+                return MockCompletion()
+
+    class MockClient:
+        chat = MockChat()
+
+    adapter = OpenAIAdapter(client=MockClient(), model_id="gpt-5-pro")
+    response = adapter.call("test prompt")
+
+    assert response.content == "gpt response"
+    assert response.input_tokens == 20
+    assert response.output_tokens == 12
+
+
+def test_anthropic_adapter_call():
+    from src.gateway.adapters.anthropic import AnthropicAdapter
+
+    class MockContentBlock:
+        text = "claude response"
+
+    class MockUsage:
+        input_tokens = 25
+        output_tokens = 15
+
+    class MockResponse:
+        content = [MockContentBlock()]
+        usage = MockUsage()
+
+    class MockMessages:
+        def create(self, **kwargs):
+            return MockResponse()
+
+    class MockClient:
+        messages = MockMessages()
+
+    adapter = AnthropicAdapter(client=MockClient(), model_id="claude-opus-4-6")
+    response = adapter.call("test prompt")
+
+    assert response.content == "claude response"
+    assert response.input_tokens == 25
+    assert response.output_tokens == 15
