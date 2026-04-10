@@ -149,6 +149,11 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 | ID | 위치 | 해결 방법 |
 |----|------|-----------|
 | K1 | `06-sources.md` Task 10 `RssSource.fetch_from_url` | `feed.feed.get("title")` → `urlparse(feed_url).netloc` → `feed_url` 순으로 폴백해 `source_name`을 설정. `test_rss_source_fallback_to_domain` 테스트 추가. **구현 반영 완료: commit `1c992c5` (L12 해소)** |
+| L13 | `src/sources/{rss,web,sns,youtube}.py` | 각 소스의 fetch 메서드에 `try/except` 추가 → 빈 리스트 + `logger.warning(exc_info=True)` 반환. 소스별 예외 주입 테스트 4개 추가 |
+| L15 | `src/scheduler/scheduler.py` | fetch는 outer try, item 루프는 inner try로 스코프 분리. 에러 메시지 "fetch failed" vs "process_item failed" 구분. `test_scheduler_isolates_per_item_errors` 테스트 추가 |
+| L16 | `src/scheduler/scheduler.py` | `SnsSource` import + 인스턴스 생성 + `if config.sources.sns:` 분기에서 `fetch_reddit("robotics", company.name)` 호출 배선. 테스트 2개 추가 |
+| L18 | `src/scheduler/scheduler.py` | 미사용 `from pathlib import Path` import 제거 |
+| L19 | `src/scheduler/scheduler.py` | `logger.error(f"... {e}")` → `logger.exception(f"...")` 교체 (3곳). traceback 자동 보존 |
 
 ### 알려진 한계 (Not Fixed — 구현·운영 중 주의)
 
@@ -167,10 +172,5 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 | L9 | `02-registry.md` + `05-writer.md` `ProfileWriter` | 프로필 파일 이름이 `companies/{company.name}.md` 기반인 반면 태깅/매칭은 `company.id` 기반으로 흐름이 섞여 있음 → alias/id/name 트리플이 어긋나면 Summarizer의 `company_updates` 키와 실제 파일이 1:1로 매칭되지 않을 수 있음 | 다국어 alias나 rename이 늘어나 파일명/식별자 매핑이 흔들릴 때 | `id → path` 역인덱스를 `ProfileWriter`에 추가하고 update/read 경로를 `id` 기준으로 통일 |
 | L10 | `10-main.md` + `09-refinery.md` | 잘못된 `--date-range` 입력이 strict failure가 아니라 전체 raw 스캔으로 이어질 수 있음 | 운영자가 `refine --date-range`를 수동 입력해 실행하는 빈도가 늘 때 | CLI에서 `YYYY-MM-DD ~ YYYY-MM-DD` 형식을 선검증하고, `_parse_date_range`는 fallback 대신 명시적 오류를 반환하도록 변경 |
 | L11 | `09-refinery.md` Task 16 `Summarizer._read_current_profiles` | Summarizer가 모든 company/topic profile을 매주 프롬프트에 포함해 Step 2 토큰 사용량이 지속 증가함 | 회사/토픽 수 증가 또는 Step 2 prompt 크기/비용이 체감될 때 | 변경된 프로필만 주입하거나, profile을 chunk 단위로 나눠 summarization을 분리 |
-| L13 | `src/sources/{rss,web,sns,youtube}.py` 전반 | 모든 소스 모듈이 `httpx.get` / `subprocess.run` 예외를 잡지 않고 상위로 전파 — 한 개 소스 타임아웃/연결거부/404가 scheduler 배치 전체를 크래시시킬 수 있음 | scheduler가 실제 네트워크 환경에서 돌기 시작할 때 (운영 초기 며칠 내 반드시 발생) | 각 source의 `fetch_from_url`에 `try/except (httpx.HTTPError, subprocess.TimeoutExpired, OSError)`를 감싸 빈 리스트 반환 + `logger.warning`으로 기록. L14와 함께 손보면 scheduler 예외 스코프도 같이 정리됨 |
-| L14 | `src/sources/sns.py` `SnsSource.fetch_reddit` | 실제 네트워크 의존 메서드지만 단위 테스트 전무. `test_sns_source_placeholder`는 stub `fetch()`만 검증하고 Reddit 경로는 구현 리그레션을 감지할 수 없음 | Reddit 소스를 config.yaml에서 켜거나 `fetch_reddit`을 직접 호출하기 시작할 때 | `monkeypatch.setattr("httpx.get", ...)`로 Reddit search.json 응답을 stub하고 `test_sns_source_fetches_reddit_posts` 추가. 응답 스키마 변경 시 detection 포인트 확보 |
-| L15 | `src/scheduler/scheduler.py` `IntelScheduler._run_collection_cycle` | `try/except`가 fetch + 아이템 처리 루프를 함께 감싸고 있어 한 아이템의 LLM 태깅/쓰기 예외가 fetch 실패로 오분류되고 나머지 아이템까지 함께 버려짐. 로그만 보면 네트워크 문제로 오인 | 한 batch에 10개 이상 아이템이 들어오기 시작하고 태깅 실패가 관측될 때 | fetch 호출만 outer try로 감싸고, 아이템 루프 내부에 inner try를 두어 per-item 실패는 해당 아이템만 skip. 에러 메시지도 "fetch failed" vs "process_item failed"로 구분 |
-| L16 | `src/scheduler/scheduler.py` | `SourcesConfig.sns: bool`과 `config.yaml`의 `sns: true`는 존재하지만 `_run_collection_cycle`에 SNS 분기가 없어 `SnsSource`가 수집 경로에 배선되지 않음 — config를 켜도 아무 일도 안 일어남 | 운영자가 config를 보고 SNS 수집이 동작한다고 오해할 때 | `if config.sources.sns: SnsSource().fetch_reddit(...)` 분기를 추가하거나, 최소한 "SNS is configured but not wired"를 명시적 경고로 로깅. L14와 함께 손보는 것이 경제적 |
+| L14 | `src/sources/sns.py` `SnsSource.fetch_reddit` | 실제 네트워크 의존 메서드지만 단위 테스트 전무. `test_sns_source_placeholder`는 stub `fetch()`만 검증하고 Reddit 경로는 구현 리그레션을 감지할 수 없음. (L13 해소로 예외 방어 테스트는 추가되었으나, 정상 응답 파싱 검증은 여전히 없음) | Reddit 소스를 config.yaml에서 켜거나 `fetch_reddit`을 직접 호출하기 시작할 때 | `monkeypatch.setattr("httpx.get", ...)`로 Reddit search.json 응답을 stub하고 `test_sns_source_fetches_reddit_posts` 추가. 응답 스키마 변경 시 detection 포인트 확보 |
 | L17 | `src/collector/pipeline.py` `CollectionPipeline._tag_item` | LLM 호출 시 body를 2000자로 truncate하지만 JSON 파싱 실패 fallback은 **전체 body**에 `registry.match_*`. 동일 아이템이 경로에 따라 다른 태깅 결과를 낼 수 있음 | 긴 아티클(>2000자) + JSON 파싱이 가끔 실패하는 모델로 교체했을 때 | fallback도 `item.body[:2000]`에 맞추거나, 상단에 `text_for_tagging = item.body[:2000]` 상수를 뽑아 두 경로가 같은 입력을 쓰도록 정렬 |
-| L18 | `src/scheduler/scheduler.py` | 미사용 `from pathlib import Path` import. 린터 도입 시 노이즈 유발 | ruff/flake8/pylint을 CI에 붙이는 시점 | import 제거. 다음에 해당 파일을 만질 때 함께 정리 |
-| L19 | `src/scheduler/scheduler.py` | 에러 로깅이 `logger.error(f"... {e}")`라 traceback이 전부 소실 — 예외 클래스와 한 줄 메시지만 남아서 실제 장애 분석이 어려움 | 운영 중 실패가 관측되기 시작하고 "어디서 죽었는지" 알아야 할 때 | `logger.error` → `logger.exception`으로 교체 (`except` 블록 안에서만 가능). message 포맷은 그대로 두고 traceback이 자동으로 따라붙게 함 |

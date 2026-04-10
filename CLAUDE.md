@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**In-progress.** Phases 1–4 (Tasks 1–14) have landed: config, registry, dedup, LLM Gateway + 3 adapters + sessions, Obsidian Writer module, sources, collector, scheduler. Phase 5 (Refinery, Tasks 15–17) and Phase 6 (Main CLI, Task 18) remain.
+**구현 완료.** Phases 1–6 (Tasks 1–18) 전체 구현 완료. 운영 하드닝 패치 (L13/L15/L16/L18/L19) 적용됨. 남은 백로그는 `docs/plans/README.md`의 L# 표 참조.
 
 - Requirements: `Initial_Requirement.md` (Korean)
 - Design spec: `docs/superpowers/specs/2026-04-09-market-intel-system-design.md`
