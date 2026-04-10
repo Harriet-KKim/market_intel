@@ -51,7 +51,6 @@ class CollectionPipeline:
         # 1. URL dedup
         if self._dedup.is_seen(item.url):
             return None
-        self._dedup.mark_seen(item.url)
 
         # 2. Tag with LLM
         company_ids, keyword_ids = self._tag_item(item)
@@ -91,19 +90,29 @@ class CollectionPipeline:
             article["source"]["channel"] = item.channel
 
         # 4. Write to vault
+        # 로컬 패치 L7: mark_seen은 write 성공 이후에만 호출. 원래 코드는 is_seen 체크
+        # 직후 mark_seen을 찍었기 때문에, tagging/write 중 크래시가 나면 URL은 dedup DB에만
+        # 남고 파일은 없는 영구 누락 상태가 됐습니다.
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        return self._raw_writer.write(article, date=date_str)
+        result_path = self._raw_writer.write(article, date=date_str)
+        self._dedup.mark_seen(item.url)
+        return result_path
 
     def _tag_item(self, item: CollectedItem) -> tuple[list[str], list[str]]:
         """Use LLM to tag companies and keywords."""
         companies_str = ", ".join(f"{c.id} ({c.name})" for c in self._registry.companies)
         keywords_str = ", ".join(f"{k.id} ({k.name})" for k in self._registry.keywords)
 
+        # 로컬 패치 L17: LLM 경로와 fallback 경로가 같은 입력을 쓰도록 정렬. 원래 코드는
+        # LLM에는 `item.body[:2000]`을 보내면서 fallback에서는 전체 body를 매칭해 동일
+        # 아이템이 경로에 따라 다른 태깅 결과를 낼 수 있었습니다.
+        text_for_tagging = item.body[:2000]
+
         prompt = TAGGING_PROMPT_TEMPLATE.format(
             companies=companies_str,
             keywords=keywords_str,
             title=item.title,
-            body=item.body[:2000],  # Limit body length for token efficiency
+            body=text_for_tagging,
         )
 
         response = self._gateway.call(self._tagging_model, prompt=prompt)
@@ -112,5 +121,8 @@ class CollectionPipeline:
             result = json.loads(response.content)
             return result.get("companies", []), result.get("keywords", [])
         except (json.JSONDecodeError, KeyError):
-            # Fallback: use registry pattern matching
-            return self._registry.match_companies(item.body), self._registry.match_keywords(item.body)
+            # Fallback: use registry pattern matching on the same truncated text
+            return (
+                self._registry.match_companies(text_for_tagging),
+                self._registry.match_keywords(text_for_tagging),
+            )
