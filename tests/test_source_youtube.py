@@ -204,7 +204,13 @@ def test_fetch_channel_videos_unsupported_handle_returns_empty(monkeypatch, capl
         items = YoutubeSource().fetch_channel_videos("@NvidiaAI")
 
     assert items == []
-    assert any("not supported" in rec.message for rec in caplog.records)
+    matching = [
+        rec
+        for rec in caplog.records
+        if rec.name == "src.sources.youtube" and "not supported" in rec.message
+    ]
+    assert len(matching) == 1
+    assert matching[0].levelname == "WARNING"
 
 
 def test_fetch_channel_videos_returns_empty_on_parse_error(monkeypatch):

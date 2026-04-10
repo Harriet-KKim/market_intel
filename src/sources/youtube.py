@@ -166,9 +166,8 @@ class YoutubeSource(BaseSource):
         feed_url = _normalize_channel_to_feed_url(channel)
         if feed_url is None:
             logger.warning(
-                "YouTube channel identifier not supported: %r. "
-                "Expected channel_id (UC...) or full feeds.xml URL.",
-                channel,
+                f"YouTube channel identifier not supported: {channel!r}. "
+                "Expected channel_id (UC...) or full feeds.xml URL."
             )
             return []
 
