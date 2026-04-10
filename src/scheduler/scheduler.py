@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
@@ -43,7 +42,7 @@ class IntelScheduler:
                         for item in items:
                             self._pipeline.process_item(item)
                     except Exception as e:
-                        logger.error(f"RSS fetch failed for {feed_url}: {e}")
+                        logger.exception(f"RSS fetch failed for {feed_url}")
 
             # Official web pages
             if self._config.collection.sources.web:
@@ -53,7 +52,7 @@ class IntelScheduler:
                         for item in items:
                             self._pipeline.process_item(item)
                     except Exception as e:
-                        logger.error(f"Web fetch failed for {page_url}: {e}")
+                        logger.exception(f"Web fetch failed for {page_url}")
 
             # YouTube channels
             if self._config.collection.sources.youtube:
@@ -63,7 +62,7 @@ class IntelScheduler:
                         # Individual video URLs would be discovered and processed
                         logger.info(f"YouTube channel check: {channel}")
                     except Exception as e:
-                        logger.error(f"YouTube fetch failed for {channel}: {e}")
+                        logger.exception(f"YouTube fetch failed for {channel}")
 
         logger.info("Collection cycle complete")
 
