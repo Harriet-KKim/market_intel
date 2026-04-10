@@ -25,8 +25,11 @@ def inject_wikilinks(text: str, registry: Registry) -> str:
 
     for search_term, link_name in replacements:
         # Skip if already wrapped in [[ ]]
+        # 로컬 패치 L4: \b 단어 경계를 추가해 alias substring 오매칭을 방지.
+        # 예: alias "humanoid" → "superhumanoid" 내부에 매칭되지 않음. 한글 alias는
+        # \b가 한글-ASCII 경계에서 동작하므로 "엔비디아가" 같은 조사 앞에서도 매칭됨.
         pattern = re.compile(
-            r"(?<!\[\[)" + re.escape(search_term) + r"(?!\]\])",
+            r"(?<!\[\[)\b" + re.escape(search_term) + r"\b(?!\]\])",
             re.IGNORECASE,
         )
         text = pattern.sub(f"[[{link_name}]]", text, count=0)
