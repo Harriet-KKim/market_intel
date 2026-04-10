@@ -148,7 +148,7 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 
 | ID | 위치 | 해결 방법 |
 |----|------|-----------|
-| K1 | `06-sources.md` Task 10 `RssSource.fetch_from_url` | `feed.feed.get("title")` → `urlparse(feed_url).netloc` → `feed_url` 순으로 폴백해 `source_name`을 설정. `test_rss_source_fallback_to_domain` 테스트 추가 |
+| K1 | `06-sources.md` Task 10 `RssSource.fetch_from_url` | `feed.feed.get("title")` → `urlparse(feed_url).netloc` → `feed_url` 순으로 폴백해 `source_name`을 설정. `test_rss_source_fallback_to_domain` 테스트 추가. **구현 반영 완료: commit `1c992c5` (L12 해소)** |
 
 ### 알려진 한계 (Not Fixed — 구현·운영 중 주의)
 
@@ -167,7 +167,6 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 | L9 | `02-registry.md` + `05-writer.md` `ProfileWriter` | 프로필 파일 이름이 `companies/{company.name}.md` 기반인 반면 태깅/매칭은 `company.id` 기반으로 흐름이 섞여 있음 → alias/id/name 트리플이 어긋나면 Summarizer의 `company_updates` 키와 실제 파일이 1:1로 매칭되지 않을 수 있음 | 다국어 alias나 rename이 늘어나 파일명/식별자 매핑이 흔들릴 때 | `id → path` 역인덱스를 `ProfileWriter`에 추가하고 update/read 경로를 `id` 기준으로 통일 |
 | L10 | `10-main.md` + `09-refinery.md` | 잘못된 `--date-range` 입력이 strict failure가 아니라 전체 raw 스캔으로 이어질 수 있음 | 운영자가 `refine --date-range`를 수동 입력해 실행하는 빈도가 늘 때 | CLI에서 `YYYY-MM-DD ~ YYYY-MM-DD` 형식을 선검증하고, `_parse_date_range`는 fallback 대신 명시적 오류를 반환하도록 변경 |
 | L11 | `09-refinery.md` Task 16 `Summarizer._read_current_profiles` | Summarizer가 모든 company/topic profile을 매주 프롬프트에 포함해 Step 2 토큰 사용량이 지속 증가함 | 회사/토픽 수 증가 또는 Step 2 prompt 크기/비용이 체감될 때 | 변경된 프로필만 주입하거나, profile을 chunk 단위로 나눠 summarization을 분리 |
-| L12 | `src/sources/rss.py` `RssSource.fetch_from_url` | **K1 미적용** — Phase 4 실행 시 원본 통합본 기준으로 구현되어 분할본의 K1 패치(feed title → netloc → feed_url 순 폴백)가 반영되지 않음. 현재는 `source_name=feed_url`이라 `registry.get_reputation_score(source_name)`가 항상 fallback(None) 반환 | `source_reputation.yaml`에 tier를 채워 신뢰도 점수를 실제로 사용하기 시작할 때 | 분할본 `06-sources.md` Task 11 구현 코드를 그대로 이식(`urlparse` import 추가 + `feed_meta.get("title")` → `urlparse(feed_url).netloc` → `feed_url` 폴백). 기존 테스트도 `source_name == "NVIDIA Blog"` assertion으로 보강 |
 | L13 | `src/sources/{rss,web,sns,youtube}.py` 전반 | 모든 소스 모듈이 `httpx.get` / `subprocess.run` 예외를 잡지 않고 상위로 전파 — 한 개 소스 타임아웃/연결거부/404가 scheduler 배치 전체를 크래시시킬 수 있음 | scheduler가 실제 네트워크 환경에서 돌기 시작할 때 (운영 초기 며칠 내 반드시 발생) | 각 source의 `fetch_from_url`에 `try/except (httpx.HTTPError, subprocess.TimeoutExpired, OSError)`를 감싸 빈 리스트 반환 + `logger.warning`으로 기록. L14와 함께 손보면 scheduler 예외 스코프도 같이 정리됨 |
 | L14 | `src/sources/sns.py` `SnsSource.fetch_reddit` | 실제 네트워크 의존 메서드지만 단위 테스트 전무. `test_sns_source_placeholder`는 stub `fetch()`만 검증하고 Reddit 경로는 구현 리그레션을 감지할 수 없음 | Reddit 소스를 config.yaml에서 켜거나 `fetch_reddit`을 직접 호출하기 시작할 때 | `monkeypatch.setattr("httpx.get", ...)`로 Reddit search.json 응답을 stub하고 `test_sns_source_fetches_reddit_posts` 추가. 응답 스키마 변경 시 detection 포인트 확보 |
 | L15 | `src/scheduler/scheduler.py` `IntelScheduler._run_collection_cycle` | `try/except`가 fetch + 아이템 처리 루프를 함께 감싸고 있어 한 아이템의 LLM 태깅/쓰기 예외가 fetch 실패로 오분류되고 나머지 아이템까지 함께 버려짐. 로그만 보면 네트워크 문제로 오인 | 한 batch에 10개 이상 아이템이 들어오기 시작하고 태깅 실패가 관측될 때 | fetch 호출만 outer try로 감싸고, 아이템 루프 내부에 inner try를 두어 per-item 실패는 해당 아이템만 skip. 에러 메시지도 "fetch failed" vs "process_item failed"로 구분 |
