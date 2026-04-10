@@ -94,6 +94,38 @@ class Registry:
     def get_reputation_score(self, source_name: str) -> float | None:
         return self._reputation_map.get(source_name.lower())
 
+    def resolve_company(self, identifier: str) -> Company | None:
+        """Resolve a company by id, name, or alias (case-insensitive).
+
+        로컬 패치 L9: Summarizer는 LLM 출력에 따라 id/name/alias 중 어느 것이든 사용할 수
+        있습니다. ProfileWriter가 파일 경로를 `{company.name}.md`로 고정하기 때문에, 호출자가
+        canonical name이 아닌 식별자를 보내면 프로필 파일을 찾지 못했습니다. 이 메서드로
+        세 표기 모두를 Company 객체로 단일화합니다.
+        """
+        if identifier in self._company_map:
+            return self._company_map[identifier]
+        id_lower = identifier.lower()
+        for company in self.companies:
+            if company.name.lower() == id_lower:
+                return company
+        for company in self.companies:
+            if any(alias.lower() == id_lower for alias in company.aliases):
+                return company
+        return None
+
+    def resolve_keyword(self, identifier: str) -> Keyword | None:
+        """Resolve a keyword by id, name, or alias (case-insensitive). 로컬 패치 L9."""
+        if identifier in self._keyword_map:
+            return self._keyword_map[identifier]
+        id_lower = identifier.lower()
+        for keyword in self.keywords:
+            if keyword.name.lower() == id_lower:
+                return keyword
+        for keyword in self.keywords:
+            if any(alias.lower() == id_lower for alias in keyword.aliases):
+                return keyword
+        return None
+
     def match_companies(self, text: str) -> list[str]:
         """Return list of company IDs whose name or aliases appear in text."""
         text_lower = text.lower()
