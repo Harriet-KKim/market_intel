@@ -80,7 +80,7 @@ def _process_env_vars(data: dict) -> dict:
 
 def load_config(path: Path) -> AppConfig:
     """Load and parse config from a YAML file."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     data = _process_env_vars(raw)
