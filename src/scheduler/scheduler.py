@@ -7,6 +7,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from src.config import AppConfig
 from src.registry import Registry
 from src.sources.rss import RssSource
+from src.sources.sns import SnsSource
 from src.sources.web import WebSource
 from src.sources.youtube import YoutubeSource
 from src.collector.pipeline import CollectionPipeline
@@ -26,6 +27,7 @@ class IntelScheduler:
         self._pipeline = pipeline
         self._scheduler = BlockingScheduler()
         self._rss = RssSource()
+        self._sns = SnsSource()
         self._web = WebSource()
         self._youtube = YoutubeSource()
 
@@ -61,6 +63,19 @@ class IntelScheduler:
                             self._pipeline.process_item(item)
                         except Exception:
                             logger.exception(f"Web process_item failed for {item.url}")
+
+            # SNS (Reddit search by company name)
+            if self._config.collection.sources.sns:
+                try:
+                    items = self._sns.fetch_reddit("robotics", company.name)
+                except Exception:
+                    logger.exception(f"SNS fetch failed for {company.name}")
+                    items = []
+                for item in items:
+                    try:
+                        self._pipeline.process_item(item)
+                    except Exception:
+                        logger.exception(f"SNS process_item failed for {item.url}")
 
             # YouTube channels (discovery stub — L6)
             if self._config.collection.sources.youtube:

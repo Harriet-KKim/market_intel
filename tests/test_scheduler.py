@@ -5,6 +5,7 @@ from src.config import (
     AppConfig, CollectionConfig, SourcesConfig,
     RefineryConfig, ApiKeysConfig, BudgetConfig,
 )
+from src.config import SourcesConfig
 from src.scheduler.scheduler import IntelScheduler
 
 
@@ -55,3 +56,50 @@ def test_scheduler_isolates_per_item_errors():
 
     # Both items should have been attempted
     assert pipeline.process_item.call_count == 2
+
+
+def test_scheduler_calls_sns_when_enabled():
+    """L16: config.sources.sns=True일 때 SnsSource.fetch_reddit이 호출된다."""
+    config = _make_config(sources=SourcesConfig(rss=False, web=False, sns=True, youtube=False))
+
+    registry = MagicMock()
+    company = MagicMock()
+    company.name = "NVIDIA"
+    company.sources = {}
+    registry.companies = [company]
+
+    pipeline = MagicMock()
+    pipeline.process_item.return_value = Path("/tmp/out.md")
+
+    scheduler = _make_scheduler(config=config, registry=registry, pipeline=pipeline)
+    mock_sns = MagicMock()
+    item = MagicMock()
+    item.url = "https://reddit.com/r/robotics/test"
+    mock_sns.fetch_reddit.return_value = [item]
+    scheduler._sns = mock_sns
+
+    scheduler.run_once()
+
+    mock_sns.fetch_reddit.assert_called_once_with("robotics", "NVIDIA")
+    pipeline.process_item.assert_called_once_with(item)
+
+
+def test_scheduler_skips_sns_when_disabled():
+    """L16: config.sources.sns=False일 때 SnsSource.fetch_reddit이 호출되지 않는다."""
+    config = _make_config(sources=SourcesConfig(rss=False, web=False, sns=False, youtube=False))
+
+    registry = MagicMock()
+    company = MagicMock()
+    company.name = "NVIDIA"
+    company.sources = {}
+    registry.companies = [company]
+
+    pipeline = MagicMock()
+
+    scheduler = _make_scheduler(config=config, registry=registry, pipeline=pipeline)
+    mock_sns = MagicMock()
+    scheduler._sns = mock_sns
+
+    scheduler.run_once()
+
+    mock_sns.fetch_reddit.assert_not_called()
