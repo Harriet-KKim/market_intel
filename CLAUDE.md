@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-**Pre-implementation.** The repository currently contains only design docs and an implementation plan — no Python code has been written yet. Future Claude sessions will likely be asked to execute the plan task-by-task.
+**In-progress.** Phases 1–4 (Tasks 1–14) have landed: config, registry, dedup, LLM Gateway + 3 adapters + sessions, Obsidian Writer module, sources, collector, scheduler. Phase 5 (Refinery, Tasks 15–17) and Phase 6 (Main CLI, Task 18) remain.
 
 - Requirements: `Initial_Requirement.md` (Korean)
 - Design spec: `docs/superpowers/specs/2026-04-09-market-intel-system-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-04-09-market-intel-implementation.md` — **authoritative source** for file layout, task order, and TDD steps. When asked to implement, load this and use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
+- **Implementation plan — canonical (split version):** `docs/plans/README.md` is the landing page; `docs/plans/01-config.md` … `10-main.md` are the authoritative per-module plans. The split version has **local patches** (K1/P1/P2/I1–I5/C1–C4/G1–G4) applied on top of the original; always read `docs/plans/README.md` first when picking up a task so you inherit the patches. When asked to implement, use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
+- **Original (reference only):** `docs/superpowers/plans/2026-04-09-market-intel-implementation.md` — 18-task monolithic plan. Do NOT execute directly; it has known bugs the split version has already fixed. Use only for cross-checking section layout.
+- **Backlog:** `docs/plans/README.md` 의 `알려진 한계 (Not Fixed)` 표(L# IDs) 가 구현 레벨 백로그의 정본. 리뷰어가 발견했지만 즉시 수정하지 않은 항목은 L# 엔트리로 기록.
 
 The user writes docs and discusses in **Korean**; respond in Korean. Code identifiers stay in English.
 
@@ -88,10 +90,12 @@ Required env vars at runtime: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API
 
 ## Working On This Plan
 
+- **Always start from `docs/plans/README.md`**, not the original monolithic plan. The split version's task files (`01-config.md` … `10-main.md`) are the canonical spec; the README lists which local patches (K1, P1, P2, I1–I5, C1–C4) have been pre-applied and which limitations (L1–L19) remain as backlog.
 - The plan is structured as **TDD**: each task is write-failing-test → run-and-confirm-fail → implement → run-and-confirm-pass → commit. Don't skip the fail step — it's how the plan validates the test actually tests something.
 - Each task ends with its own commit. Don't batch multiple tasks into one commit.
 - Profile writer tests (Task 9) are the trickiest: merging into existing company/topic docs must preserve fixed sections (`## 회사 개요`, `## 최근 동향`, etc.) and append under the right headings. Read that task carefully before coding.
 - When the plan says "Context Branching" for the refinery pipeline, it means the Step 3 reviewer must be `session.branch_from(checkpoint)`, not a continuation of the Step 2 thread.
+- **Windows note:** `python` on Windows 11 may open the MS Store installer. Use `py -m pytest ...` to invoke Python reliably.
 
 ## Plugins
 
