@@ -161,6 +161,7 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 | L3 | `src/config.py` + `src/main.py` + `config.yaml` | `AppConfig.dedup_db_path` 필드 신설, `load_config`에서 `dedup.db_path` 키 읽기 (기본값 `vault_path/.dedup.db`), `main.py`가 이 경로 사용. `test_load_config_dedup_db_path_*` 2개 추가 |
 | L5 | `src/config.py` + `src/scheduler/scheduler.py` + `config.yaml` | `CollectionConfig.timezone` 필드 신설 (기본 `Asia/Seoul`), `BlockingScheduler(timezone=ZoneInfo(...))` 주입. `test_scheduler_uses_configured_timezone` 외 config/scheduler 테스트 4개 추가 |
 | L14 | `tests/test_source_sns.py` | `monkeypatch.setattr("httpx.get", ...)`로 Reddit `search.json` 응답 stub. 정상 파싱 / 빈 결과 / non-200 테스트 3개 추가 |
+| L6 | `src/sources/youtube.py` + `src/scheduler/scheduler.py` | `YoutubeSource.fetch_channel_videos` 신설 — YouTube 공개 Atom 피드(`feeds/videos.xml?channel_id=...`)를 feedparser로 파싱해 최신 ~15개 비디오의 title/description/link 를 `CollectedItem` 으로 방출. `_normalize_channel_to_feed_url` 이 UC 24자 channel_id 와 full feed URL 두 형태를 수용, `@handle`은 의도적 미지원(MVP). 스케줄러 YouTube 분기를 RSS/Web 과 동일한 outer/inner try 패턴으로 재작성해 fetch 결과를 `CollectionPipeline.process_item`에 흘려보냄. Transcript 추출은 기존 `fetch_from_url` opt-in 경로로 보존. 유닛 테스트 7개 + 스케줄러 통합 테스트 2개 추가 |
 
 ### 알려진 한계 (Not Fixed — 구현·운영 중 주의)
 
@@ -170,7 +171,6 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 |----|------|------|--------|-------------|
 | L1 | `09-refinery.md` Task 16 `Summarizer` + `05-writer.md` `ProfileWriter.update_company/update_topic` | Summarizer가 매 주 `company_updates[name]` / `topic_updates[name]` 키에 **전체 본문 Markdown**을 내려보내고 `ProfileWriter`가 그대로 덮어씀 → 사용자가 Obsidian에서 수동 편집한 내용이 주간 실행마다 손실될 수 있음 | 사용자가 회사/토픽 프로필을 수동 편집하기 시작할 때 | 섹션별 append/merge 전략으로 전환하거나, Summarizer에게 "기존 본문을 인자로 받고 부분 patch만 반환하라"는 스키마로 변경 |
 | L2 | `09-refinery.md` Task 15 `Consolidator._read_raw_data` | 범위 필터는 적용되지만(I5) 필터 내부 raw는 여전히 **전량**이 단일 프롬프트로 전송 → raw 볼륨이 커지면 GPT5 Pro 토큰 한도 초과 | 주간 raw 볼륨이 증가해 prompt 길이, 실행 시간, 비용이 눈에 띄게 커질 때 | `max_chars_per_article` · `max_total_chars` 파라미터 추가, 또는 회사/주제별 사전 그룹핑 후 chunk 단위로 호출 |
-| L6 | `08-scheduler.md` Task 14 YouTube 분기 | 현재는 `logger.info(f"YouTube channel check: {channel}")`만 찍고 실제 비디오 discovery 없음 — `sources.youtube`를 켜도 채널 수집은 동작하지 않음 | YouTube 채널을 실제 수집 소스로 운영할 때 | yt-dlp `--flat-playlist` 또는 RSS(`feeds/videos.xml?channel_id=...`) 기반 discovery 구현 |
 | L8 | `09-refinery.md` Task 17 `RefinementPipeline.run` | 3-step 시퀀스 중 Step 3에서 실패하면 Step 1·2의 산출물은 이미 Vault에 기록된 상태로 전체 재실행이 필요 → 재시도 시 토큰 이중 소비 | Step 3 실패 재시도가 실제 운영에서 반복될 때 | `--resume-from` 플래그 또는 step별 idempotent skip 도입 |
 | L10 | `10-main.md` + `09-refinery.md` | 잘못된 `--date-range` 입력이 strict failure가 아니라 전체 raw 스캔으로 이어질 수 있음 | 운영자가 `refine --date-range`를 수동 입력해 실행하는 빈도가 늘 때 | CLI에서 `YYYY-MM-DD ~ YYYY-MM-DD` 형식을 선검증하고, `_parse_date_range`는 fallback 대신 명시적 오류를 반환하도록 변경 |
 | L11 | `09-refinery.md` Task 16 `Summarizer._read_current_profiles` | Summarizer가 모든 company/topic profile을 매주 프롬프트에 포함해 Step 2 토큰 사용량이 지속 증가함 | 회사/토픽 수 증가 또는 Step 2 prompt 크기/비용이 체감될 때 | 변경된 프로필만 주입하거나, profile을 chunk 단위로 나눠 summarization을 분리 |
