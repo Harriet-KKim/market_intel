@@ -120,3 +120,61 @@ def test_scheduler_skips_sns_when_disabled():
     scheduler.run_once()
 
     mock_sns.fetch_reddit.assert_not_called()
+
+
+def test_scheduler_discovers_youtube_videos():
+    """L6: sources.youtube=True일 때 fetch_channel_videos 호출 결과가 pipeline.process_item 으로 흐른다."""
+    config = _make_config(
+        sources=SourcesConfig(rss=False, web=False, sns=False, youtube=True)
+    )
+
+    registry = MagicMock()
+    company = MagicMock()
+    company.name = "NVIDIA"
+    company.sources = {"youtube": ["UCHuFmzwsYryg1kUV0IMzEag"]}
+    registry.companies = [company]
+
+    pipeline = MagicMock()
+    pipeline.process_item.return_value = Path("/tmp/out.md")
+
+    scheduler = _make_scheduler(config=config, registry=registry, pipeline=pipeline)
+
+    mock_youtube = MagicMock()
+    item1 = MagicMock()
+    item1.url = "https://www.youtube.com/watch?v=abc123"
+    item2 = MagicMock()
+    item2.url = "https://www.youtube.com/watch?v=def456"
+    mock_youtube.fetch_channel_videos.return_value = [item1, item2]
+    scheduler._youtube = mock_youtube
+
+    scheduler.run_once()
+
+    mock_youtube.fetch_channel_videos.assert_called_once_with(
+        "UCHuFmzwsYryg1kUV0IMzEag"
+    )
+    assert pipeline.process_item.call_count == 2
+    pipeline.process_item.assert_any_call(item1)
+    pipeline.process_item.assert_any_call(item2)
+
+
+def test_scheduler_skips_youtube_discovery_when_disabled():
+    """sources.youtube=False일 때 fetch_channel_videos 는 호출되지 않는다."""
+    config = _make_config(
+        sources=SourcesConfig(rss=False, web=False, sns=False, youtube=False)
+    )
+
+    registry = MagicMock()
+    company = MagicMock()
+    company.name = "NVIDIA"
+    company.sources = {"youtube": ["UCHuFmzwsYryg1kUV0IMzEag"]}
+    registry.companies = [company]
+
+    pipeline = MagicMock()
+    scheduler = _make_scheduler(config=config, registry=registry, pipeline=pipeline)
+    mock_youtube = MagicMock()
+    scheduler._youtube = mock_youtube
+
+    scheduler.run_once()
+
+    mock_youtube.fetch_channel_videos.assert_not_called()
+    pipeline.process_item.assert_not_called()

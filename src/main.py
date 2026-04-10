@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 REGISTRY_TEMPLATES: dict[str, str] = {
     "companies.yaml": """# Physical AI 관심 회사 레지스트리.
 # 자유롭게 추가/편집하세요. Obsidian에서 이 파일을 열어 수정할 수 있습니다.
+#
+# sources.youtube 형식: channel_id (UC로 시작하는 24자) 또는 완성된
+# https://www.youtube.com/feeds/videos.xml?channel_id=... URL 리스트.
+# @handle 형식은 미지원 — 채널 페이지 소스(Ctrl+U)에서 "channelId" 값을 복사해 입력.
 companies:
   - id: nvidia
     name: NVIDIA

@@ -80,10 +80,25 @@ class IntelScheduler:
                     except Exception:
                         logger.exception(f"SNS process_item failed for {item.url}")
 
-            # YouTube channels (discovery stub — L6)
+            # YouTube channels — L6 resolved: discovery via public Atom feed.
+            # fetch_channel_videos returns items whose body is the Atom entry
+            # description (not the transcript). Transcript extraction remains
+            # an opt-in path via YoutubeSource.fetch_from_url; see
+            # src/sources/youtube.py::fetch_channel_videos for rationale.
             if self._config.collection.sources.youtube:
                 for channel in company.sources.get("youtube", []):
-                    logger.info(f"YouTube channel check: {channel}")
+                    try:
+                        items = self._youtube.fetch_channel_videos(channel)
+                    except Exception:
+                        logger.exception(f"YouTube fetch failed for {channel}")
+                        continue
+                    for item in items:
+                        try:
+                            self._pipeline.process_item(item)
+                        except Exception:
+                            logger.exception(
+                                f"YouTube process_item failed for {item.url}"
+                            )
 
         logger.info("Collection cycle complete")
 
