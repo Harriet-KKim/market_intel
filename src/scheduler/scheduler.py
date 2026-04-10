@@ -39,30 +39,33 @@ class IntelScheduler:
                 for feed_url in company.sources.get("rss", []):
                     try:
                         items = self._rss.fetch_from_url(feed_url)
-                        for item in items:
-                            self._pipeline.process_item(item)
-                    except Exception as e:
+                    except Exception:
                         logger.exception(f"RSS fetch failed for {feed_url}")
+                        continue
+                    for item in items:
+                        try:
+                            self._pipeline.process_item(item)
+                        except Exception:
+                            logger.exception(f"RSS process_item failed for {item.url}")
 
             # Official web pages
             if self._config.collection.sources.web:
                 for page_url in company.sources.get("official", []):
                     try:
                         items = self._web.fetch_from_url(page_url)
-                        for item in items:
-                            self._pipeline.process_item(item)
-                    except Exception as e:
+                    except Exception:
                         logger.exception(f"Web fetch failed for {page_url}")
+                        continue
+                    for item in items:
+                        try:
+                            self._pipeline.process_item(item)
+                        except Exception:
+                            logger.exception(f"Web process_item failed for {item.url}")
 
-            # YouTube channels
+            # YouTube channels (discovery stub — L6)
             if self._config.collection.sources.youtube:
                 for channel in company.sources.get("youtube", []):
-                    try:
-                        # YouTube channel fetching requires search API or scraping
-                        # Individual video URLs would be discovered and processed
-                        logger.info(f"YouTube channel check: {channel}")
-                    except Exception as e:
-                        logger.exception(f"YouTube fetch failed for {channel}")
+                    logger.info(f"YouTube channel check: {channel}")
 
         logger.info("Collection cycle complete")
 
