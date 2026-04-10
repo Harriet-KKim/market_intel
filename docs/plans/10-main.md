@@ -6,7 +6,7 @@
 **모듈:** `src/main.py`
 **역할:** CLI 진입점. `collect` / `refine` / `schedule` / `init` 네 가지 커맨드로 전체 시스템을 조작.
 **핵심 설계 포인트:**
-- `setup_gateway(config)`는 세 어댑터(Gemini / OpenAI / Anthropic)를 모두 등록. 모델 ID는 하드코딩 (`gemini-2.0-flash`, `gpt-5-pro`, `claude-opus-4-6`).
+- `setup_gateway(config)`는 세 어댑터(Gemini / OpenAI / Anthropic)를 모두 등록. 모델 ID는 하드코딩 (`gemini-3.1-flash-lite-preview`, `gpt-5-pro`, `claude-opus-4-6`).
 - **`init` 커맨드는 3단계 (로컬 패치 C2·I3)**:
   1. Vault 디렉터리 구조 생성 (`VaultManager` 초기화로 자동).
   2. `vault/registry/` 아래에 `companies.yaml`, `keywords.yaml`, `source_reputation.yaml` 템플릿을 기록 (이미 존재하면 건너뜀). 이 단계가 없으면 **원본 플랜의 `init` 커맨드는 첫 실행에서 `Registry(...)` 생성 시 YAML 파일이 없어 크래시**합니다.
@@ -135,7 +135,7 @@ def setup_gateway(config) -> LLMGateway:
     from google import genai
     from src.gateway.adapters.gemini import GeminiAdapter
     gemini_client = genai.Client(api_key=config.api_keys.gemini)
-    gateway.register_adapter("gemini", GeminiAdapter(client=gemini_client, model_id="gemini-2.0-flash"))
+    gateway.register_adapter("gemini", GeminiAdapter(client=gemini_client, model_id="gemini-3.1-flash-lite-preview"))
 
     # OpenAI GPT5 Pro (consolidation + review)
     from openai import OpenAI

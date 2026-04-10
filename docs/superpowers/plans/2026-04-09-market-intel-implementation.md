@@ -913,7 +913,7 @@ def test_gemini_adapter_call(monkeypatch):
     class MockClient:
         models = type("Models", (), {"generate_content": MockModel().generate_content})()
 
-    adapter = GeminiAdapter(client=MockClient(), model_id="gemini-2.0-flash")
+    adapter = GeminiAdapter(client=MockClient(), model_id="gemini-3.1-flash-lite-preview")
     response = adapter.call("test prompt")
 
     assert response.content == "gemini response"
@@ -3551,7 +3551,7 @@ def setup_gateway(config) -> LLMGateway:
     from google import genai
     from src.gateway.adapters.gemini import GeminiAdapter
     gemini_client = genai.Client(api_key=config.api_keys.gemini)
-    gateway.register_adapter("gemini", GeminiAdapter(client=gemini_client, model_id="gemini-2.0-flash"))
+    gateway.register_adapter("gemini", GeminiAdapter(client=gemini_client, model_id="gemini-3.1-flash-lite-preview"))
 
     # OpenAI GPT5 Pro (consolidation + review)
     from openai import OpenAI
