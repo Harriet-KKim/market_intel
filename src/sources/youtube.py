@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import tempfile
 from pathlib import Path
 
 from src.sources.base import BaseSource, CollectedItem
+
+logger = logging.getLogger(__name__)
 
 
 def extract_transcript(video_url: str) -> str:
@@ -96,7 +99,12 @@ class YoutubeSource(BaseSource):
 
     def fetch_from_url(self, video_url: str, channel: str | None = None) -> list[CollectedItem]:
         """Fetch transcript from a YouTube video URL."""
-        transcript = extract_transcript(video_url)
+        try:
+            transcript = extract_transcript(video_url)
+        except (subprocess.TimeoutExpired, OSError):
+            logger.warning(f"YouTube fetch failed for {video_url}", exc_info=True)
+            return []
+
         if not transcript:
             return []
 

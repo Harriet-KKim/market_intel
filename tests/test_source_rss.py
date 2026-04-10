@@ -57,3 +57,17 @@ def test_rss_source_fallback_to_domain(monkeypatch):
 
     items = RssSource().fetch_from_url("https://example.com/feed.xml")
     assert items[0].source_name == "example.com"
+
+
+def test_rss_source_returns_empty_on_network_error(monkeypatch):
+    """L13: feedparser.parse가 예외를 던져도 빈 리스트 반환, 크래시 안 함."""
+    from src.sources.rss import RssSource
+    import feedparser
+
+    def raise_error(url):
+        raise OSError("Network unreachable")
+
+    monkeypatch.setattr(feedparser, "parse", raise_error)
+    source = RssSource()
+    items = source.fetch_from_url("https://example.com/feed.xml")
+    assert items == []

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import feedparser
 
 from src.sources.base import BaseSource, CollectedItem
+
+logger = logging.getLogger(__name__)
 
 
 class RssSource(BaseSource):
@@ -17,7 +20,11 @@ class RssSource(BaseSource):
 
     def fetch_from_url(self, feed_url: str) -> list[CollectedItem]:
         """Fetch and parse an RSS feed URL."""
-        feed = feedparser.parse(feed_url)
+        try:
+            feed = feedparser.parse(feed_url)
+        except Exception:
+            logger.warning(f"RSS fetch failed for {feed_url}", exc_info=True)
+            return []
 
         # 로컬 패치 K1 해결: source_name을 feed title로 폴백.
         # 원본 플랜은 source_name=feed_url로 저장해서 registry.get_reputation_score()

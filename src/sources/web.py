@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from src.sources.base import BaseSource, CollectedItem
+
+logger = logging.getLogger(__name__)
 
 
 class WebSource(BaseSource):
@@ -13,7 +17,12 @@ class WebSource(BaseSource):
 
     def fetch_from_url(self, url: str) -> list[CollectedItem]:
         """Fetch raw HTML from a URL. Content extraction is handled by Agent."""
-        response = httpx.get(url, follow_redirects=True, timeout=30)
+        try:
+            response = httpx.get(url, follow_redirects=True, timeout=30)
+        except (httpx.HTTPError, OSError):
+            logger.warning(f"Web fetch failed for {url}", exc_info=True)
+            return []
+
         if response.status_code != 200:
             return []
 

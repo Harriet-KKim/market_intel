@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from src.sources.base import BaseSource, CollectedItem
+
+logger = logging.getLogger(__name__)
 
 
 class SnsSource(BaseSource):
@@ -23,7 +27,12 @@ class SnsSource(BaseSource):
         params = {"q": query, "sort": "new", "limit": 25, "restrict_sr": "on"}
         headers = {"User-Agent": "market-intel/0.1"}
 
-        response = httpx.get(url, params=params, headers=headers, timeout=30)
+        try:
+            response = httpx.get(url, params=params, headers=headers, timeout=30)
+        except (httpx.HTTPError, OSError):
+            logger.warning(f"Reddit fetch failed for r/{subreddit}", exc_info=True)
+            return []
+
         if response.status_code != 200:
             return []
 

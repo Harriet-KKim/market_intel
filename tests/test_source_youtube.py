@@ -48,3 +48,17 @@ It's a humanoid platform.
     assert "-->" not in result
     assert "<c>" not in result
     assert "</c>" not in result
+
+
+def test_youtube_source_returns_empty_on_extract_error(monkeypatch):
+    """L13: extract_transcript가 예외를 던져도 빈 리스트 반환, 크래시 안 함."""
+    import subprocess
+    from src.sources.youtube import YoutubeSource
+
+    def raise_error(video_url):
+        raise subprocess.TimeoutExpired(cmd="yt-dlp", timeout=120)
+
+    monkeypatch.setattr("src.sources.youtube.extract_transcript", raise_error)
+    source = YoutubeSource()
+    items = source.fetch_from_url("https://youtube.com/watch?v=abc123")
+    assert items == []
