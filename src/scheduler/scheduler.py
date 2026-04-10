@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
@@ -25,7 +26,9 @@ class IntelScheduler:
         self._config = config
         self._registry = registry
         self._pipeline = pipeline
-        self._scheduler = BlockingScheduler()
+        # 로컬 패치 L5: 명시적 timezone으로 실행. 시스템 TZ에 의존하지 않아 컨테이너/
+        # 서버 배포 환경 차이로 실제 실행 시각이 달라지는 문제를 방지한다.
+        self._scheduler = BlockingScheduler(timezone=ZoneInfo(config.collection.timezone))
         self._rss = RssSource()
         self._sns = SnsSource()
         self._web = WebSource()

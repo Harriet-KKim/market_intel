@@ -178,7 +178,11 @@ def main():
     vault = VaultManager(config.vault_path)
     registry = Registry(config.vault_path / "registry")
     gateway = setup_gateway(config)
-    dedup = UrlDedup(Path("dedup.db"))
+    # 로컬 패치 L3: dedup.db는 CWD 상대경로가 아닌 config 기반 절대 경로 사용.
+    # 기본값은 `vault_path / ".dedup.db"`로 설정되며, `src/config.py::load_config`에서
+    # `dedup.db_path` 키로 오버라이드할 수 있다. 부모 디렉터리가 없으면 만들어 준다.
+    config.dedup_db_path.parent.mkdir(parents=True, exist_ok=True)
+    dedup = UrlDedup(config.dedup_db_path)
     raw_writer = RawWriter(vault)
 
     if args.command == "collect":

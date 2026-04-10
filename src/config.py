@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -20,6 +20,9 @@ class SourcesConfig:
 class CollectionConfig:
     interval_hours: int
     sources: SourcesConfig
+    # 로컬 패치 L5: Scheduler가 명시적인 timezone으로 실행되도록 선언. 컨테이너/서버의
+    # 시스템 TZ에 의존하면 배포 환경마다 실제 실행 시각이 달라지는 문제를 막기 위함.
+    timezone: str = "Asia/Seoul"
 
 
 @dataclass
@@ -48,6 +51,10 @@ class AppConfig:
     refinery: RefineryConfig
     api_keys: ApiKeysConfig
     budget: BudgetConfig
+    # 로컬 패치 L3: dedup.db를 CWD 상대경로가 아니라 절대 경로로 보관. 기본값은
+    # `vault_path / ".dedup.db"`(vault 안 숨김 파일)이며, config.yaml의 `dedup.db_path`로
+    # 오버라이드 가능. main.py가 다른 디렉터리에서 실행돼도 dedup 상태가 보존됩니다.
+    dedup_db_path: Path = field(default_factory=lambda: Path("dedup.db"))
 
 
 def _substitute_env_vars(value: str) -> str:
@@ -78,11 +85,20 @@ def load_config(path: Path) -> AppConfig:
 
     data = _process_env_vars(raw)
 
+    vault_path = Path(data["vault_path"])
+
+    # 로컬 패치 L3: dedup.db 경로는 config 우선, 없으면 vault 내부 숨김 파일.
+    dedup_section = data.get("dedup") or {}
+    dedup_raw = dedup_section.get("db_path")
+    dedup_db_path = Path(dedup_raw) if dedup_raw else vault_path / ".dedup.db"
+
     return AppConfig(
-        vault_path=Path(data["vault_path"]),
+        vault_path=vault_path,
         collection=CollectionConfig(
             interval_hours=data["collection"]["interval_hours"],
             sources=SourcesConfig(**data["collection"]["sources"]),
+            # 로컬 패치 L5: timezone은 선택 필드, 기본 Asia/Seoul.
+            timezone=data["collection"].get("timezone", "Asia/Seoul"),
         ),
         refinery=RefineryConfig(
             schedule_day=data["refinery"]["schedule_day"],
@@ -97,4 +113,5 @@ def load_config(path: Path) -> AppConfig:
             enabled=data["budget"]["enabled"],
             daily_limit_usd=data["budget"]["daily_limit_usd"],
         ),
+        dedup_db_path=dedup_db_path,
     )
