@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import feedparser
+from email.utils import parsedate_to_datetime
+
+from src.sources.base import BaseSource, CollectedItem
+
+
+class RssSource(BaseSource):
+    source_type = "news"
+
+    def fetch(self, company_id: str, keywords: list[str]) -> list[CollectedItem]:
+        """Not used directly — use fetch_from_url for RSS sources."""
+        return []
+
+    def fetch_from_url(self, feed_url: str) -> list[CollectedItem]:
+        """Fetch and parse an RSS feed URL."""
+        feed = feedparser.parse(feed_url)
+        items = []
+
+        for entry in feed.get("entries", []):
+            published_at = None
+            if "published" in entry:
+                try:
+                    dt = parsedate_to_datetime(entry["published"])
+                    published_at = dt.isoformat()
+                except (ValueError, TypeError):
+                    published_at = entry.get("published")
+
+            items.append(
+                CollectedItem(
+                    title=entry.get("title", ""),
+                    url=entry.get("link", ""),
+                    body=entry.get("summary", ""),
+                    source_type=self.source_type,
+                    source_name=feed_url,
+                    author=entry.get("author"),
+                    published_at=published_at,
+                    language=None,
+                    content_type="article",
+                )
+            )
+
+        return items
