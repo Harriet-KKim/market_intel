@@ -10,6 +10,7 @@ from src.gateway.gateway import LLMGateway
 from src.registry import Registry
 from src.sources.base import CollectedItem
 from src.writer.raw_writer import RawWriter
+from src.writer.wikilink import inject_wikilinks  # 로컬 패치 P1
 
 
 TAGGING_PROMPT_TEMPLATE = """You are a tagging agent. Given the following article, identify which companies and keywords from the registry are mentioned.
@@ -62,6 +63,10 @@ class CollectionPipeline:
         company_links = [f"[[{self._registry.get_company(cid).name}]]" for cid in company_ids if self._registry.get_company(cid)]
         reputation = self._registry.get_reputation_score(item.source_name)
 
+        # 로컬 패치 P1: 본문 내부 회사/주제 이름을 [[WikiLink]]로 치환해 Obsidian Backlinks에 잡히게 함.
+        # frontmatter `companies` 필드만 남기면 본문 어디에 언급됐는지 역인덱스가 끊깁니다.
+        linked_body = inject_wikilinks(item.body, self._registry)
+
         article = {
             "id": article_id,
             "title": item.title,
@@ -78,7 +83,7 @@ class CollectionPipeline:
             "tags": keyword_ids,
             "reliability": reputation,
             "content_type": item.content_type,
-            "body": item.body,
+            "body": linked_body,
         }
 
         if item.source_type == "video":

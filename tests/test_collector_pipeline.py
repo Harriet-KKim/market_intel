@@ -61,6 +61,14 @@ def test_pipeline_processes_item(tmp_path, sample_registry_dir):
     assert "[[NVIDIA]]" in content
     assert "humanoid-robot" in content
 
+    # 로컬 패치 P1: frontmatter뿐 아니라 본문 내부에도 [[NVIDIA]] 링크가 주입돼야
+    # Obsidian Backlinks가 "어떤 raw 노트가 NVIDIA를 언급했는지" 역인덱스를 구성할 수 있다.
+    from src.writer.frontmatter import parse_document
+    _, body = parse_document(content)
+    assert "[[NVIDIA]]" in body, (
+        "body 내부에 WikiLink가 주입되지 않았습니다. inject_wikilinks 호출 누락 가능성."
+    )
+
 
 def test_pipeline_dedup_skips_seen(tmp_path, sample_registry_dir):
     from src.collector.pipeline import CollectionPipeline
