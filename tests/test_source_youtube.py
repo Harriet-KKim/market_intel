@@ -62,3 +62,159 @@ def test_youtube_source_returns_empty_on_extract_error(monkeypatch):
     source = YoutubeSource()
     items = source.fetch_from_url("https://youtube.com/watch?v=abc123")
     assert items == []
+
+
+# ---------- L6: channel discovery via Atom feed ----------
+
+
+def test_normalize_channel_id_to_feed_url():
+    """UC로 시작하는 24자 channel_id는 Atom feed URL로 조립된다."""
+    from src.sources.youtube import _normalize_channel_to_feed_url
+
+    result = _normalize_channel_to_feed_url("UCHuFmzwsYryg1kUV0IMzEag")
+    assert result == (
+        "https://www.youtube.com/feeds/videos.xml?"
+        "channel_id=UCHuFmzwsYryg1kUV0IMzEag"
+    )
+
+
+def test_normalize_full_feed_url_passthrough():
+    """완전한 feeds.xml URL은 변형 없이 그대로 반환된다."""
+    from src.sources.youtube import _normalize_channel_to_feed_url
+
+    url = (
+        "https://www.youtube.com/feeds/videos.xml?"
+        "channel_id=UCHuFmzwsYryg1kUV0IMzEag"
+    )
+    assert _normalize_channel_to_feed_url(url) == url
+
+
+def test_normalize_unsupported_handle_returns_none():
+    """@handle 과 plain username 은 MVP 범위 밖이라 None을 반환한다."""
+    from src.sources.youtube import _normalize_channel_to_feed_url
+
+    assert _normalize_channel_to_feed_url("@NvidiaAI") is None
+    assert _normalize_channel_to_feed_url("NvidiaAI") is None
+    # UC로 시작하지만 길이가 틀린 경우도 None
+    assert _normalize_channel_to_feed_url("UCtooShort") is None
+
+
+def test_fetch_channel_videos_from_channel_id(monkeypatch):
+    """UC channel_id → feedparser로 Atom 피드 파싱 → CollectedItem 리스트."""
+    import feedparser
+    from src.sources.youtube import YoutubeSource
+
+    fake_feed = feedparser.FeedParserDict(
+        {
+            "feed": feedparser.FeedParserDict({"title": "NVIDIA Developer"}),
+            "entries": [
+                feedparser.FeedParserDict(
+                    {
+                        "title": "GR00T 2.0 Launch Demo",
+                        "link": "https://www.youtube.com/watch?v=abc123",
+                        "summary": "NVIDIA unveils GR00T 2.0 for humanoid robots.",
+                        "author": "NVIDIA Developer",
+                        "published": "2026-04-08T12:00:00+00:00",
+                    }
+                ),
+                feedparser.FeedParserDict(
+                    {
+                        "title": "Isaac Sim Tutorial",
+                        "link": "https://www.youtube.com/watch?v=def456",
+                        "summary": "Walkthrough of the Isaac Sim workflow.",
+                        "author": "NVIDIA Developer",
+                        "published": "2026-04-07T09:00:00+00:00",
+                    }
+                ),
+            ],
+        }
+    )
+
+    captured_url: dict[str, str] = {}
+
+    def fake_parse(url):
+        captured_url["url"] = url
+        return fake_feed
+
+    monkeypatch.setattr("src.sources.youtube.feedparser.parse", fake_parse)
+
+    source = YoutubeSource()
+    items = source.fetch_channel_videos("UCHuFmzwsYryg1kUV0IMzEag")
+
+    assert captured_url["url"] == (
+        "https://www.youtube.com/feeds/videos.xml?"
+        "channel_id=UCHuFmzwsYryg1kUV0IMzEag"
+    )
+    assert len(items) == 2
+
+    first = items[0]
+    assert first.title == "GR00T 2.0 Launch Demo"
+    assert first.url == "https://www.youtube.com/watch?v=abc123"
+    assert first.body == "NVIDIA unveils GR00T 2.0 for humanoid robots."
+    assert first.source_type == "video"
+    assert first.source_name == "YouTube"
+    assert first.channel == "NVIDIA Developer"
+    assert first.content_type == "video"
+    assert first.author == "NVIDIA Developer"
+    assert first.published_at == "2026-04-08T12:00:00+00:00"
+
+    assert items[1].url == "https://www.youtube.com/watch?v=def456"
+
+
+def test_fetch_channel_videos_accepts_full_feed_url(monkeypatch):
+    """full feeds.xml URL은 prefix 중복 없이 그대로 feedparser에 전달된다."""
+    import feedparser
+    from src.sources.youtube import YoutubeSource
+
+    empty_feed = feedparser.FeedParserDict(
+        {
+            "feed": feedparser.FeedParserDict({"title": ""}),
+            "entries": [],
+        }
+    )
+    captured: dict[str, str] = {}
+
+    def fake_parse(url):
+        captured["url"] = url
+        return empty_feed
+
+    monkeypatch.setattr("src.sources.youtube.feedparser.parse", fake_parse)
+
+    full_url = (
+        "https://www.youtube.com/feeds/videos.xml?"
+        "channel_id=UCHuFmzwsYryg1kUV0IMzEag"
+    )
+    YoutubeSource().fetch_channel_videos(full_url)
+    assert captured["url"] == full_url
+
+
+def test_fetch_channel_videos_unsupported_handle_returns_empty(monkeypatch, caplog):
+    """@handle은 feedparser 호출 없이 즉시 빈 리스트 + 경고 로그."""
+    import logging
+    from src.sources.youtube import YoutubeSource
+
+    def should_not_be_called(url):
+        raise AssertionError(f"feedparser.parse should not be called, got {url}")
+
+    monkeypatch.setattr(
+        "src.sources.youtube.feedparser.parse", should_not_be_called
+    )
+
+    with caplog.at_level(logging.WARNING, logger="src.sources.youtube"):
+        items = YoutubeSource().fetch_channel_videos("@NvidiaAI")
+
+    assert items == []
+    assert any("not supported" in rec.message for rec in caplog.records)
+
+
+def test_fetch_channel_videos_returns_empty_on_parse_error(monkeypatch):
+    """L13 parity: feedparser가 예외를 던지면 빈 리스트 반환 (crash 없음)."""
+    from src.sources.youtube import YoutubeSource
+
+    def raise_error(url):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr("src.sources.youtube.feedparser.parse", raise_error)
+
+    items = YoutubeSource().fetch_channel_videos("UCHuFmzwsYryg1kUV0IMzEag")
+    assert items == []

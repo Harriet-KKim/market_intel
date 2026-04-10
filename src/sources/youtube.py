@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import feedparser
+
 from src.sources.base import BaseSource, CollectedItem
 
 logger = logging.getLogger(__name__)
@@ -91,6 +93,26 @@ def _parse_vtt(vtt_content: str) -> str:
     return "\n".join(lines)
 
 
+def _normalize_channel_to_feed_url(channel: str) -> str | None:
+    """Normalize a YouTube channel identifier to an Atom feed URL.
+
+    Accepts:
+      - Full feed URL starting with ``https://www.youtube.com/feeds/videos.xml``
+      - Bare channel_id: 24 chars total, starting with ``UC``
+
+    Returns ``None`` for unsupported forms such as ``@handle`` or plain
+    usernames. Handle resolution would require scraping the channel HTML for
+    its embedded ``channelId`` field — brittle and out of scope for MVP (L6).
+    Users must supply a channel_id (find it in the channel page source under
+    ``"channelId"``) or a pre-built feed URL.
+    """
+    if channel.startswith("https://www.youtube.com/feeds/videos.xml"):
+        return channel
+    if channel.startswith("UC") and len(channel) == 24:
+        return f"https://www.youtube.com/feeds/videos.xml?channel_id={channel}"
+    return None
+
+
 class YoutubeSource(BaseSource):
     source_type = "video"
 
@@ -122,3 +144,60 @@ class YoutubeSource(BaseSource):
                 channel=channel,
             )
         ]
+
+    def fetch_channel_videos(self, channel: str) -> list[CollectedItem]:
+        """Discover recent videos from a YouTube channel via its public Atom feed.
+
+        ``channel`` accepts either:
+          - A bare channel_id starting with ``UC`` (24 chars total), or
+          - A full ``https://www.youtube.com/feeds/videos.xml?...`` URL.
+
+        YouTube exposes the latest ~15 videos per channel in this feed, no
+        API key required. Handle resolution (``@NvidiaAI`` → channel_id) is
+        out of scope — see :func:`_normalize_channel_to_feed_url`.
+
+        The returned ``CollectedItem.body`` is the Atom entry description,
+        **not the transcript**. Transcript extraction via yt-dlp remains an
+        opt-in path (``fetch_from_url`` / ``extract_transcript``) because
+        transcripts are slow (10-30s/video through a subprocess) and many
+        videos lack captions. Description is sufficient input for Gemini
+        tagging in the collection pipeline.
+        """
+        feed_url = _normalize_channel_to_feed_url(channel)
+        if feed_url is None:
+            logger.warning(
+                "YouTube channel identifier not supported: %r. "
+                "Expected channel_id (UC...) or full feeds.xml URL.",
+                channel,
+            )
+            return []
+
+        try:
+            feed = feedparser.parse(feed_url)
+        except Exception:
+            logger.warning(
+                f"YouTube channel fetch failed for {channel}", exc_info=True
+            )
+            return []
+
+        feed_meta = getattr(feed, "feed", {}) or {}
+        raw_title = feed_meta.get("title") if hasattr(feed_meta, "get") else None
+        channel_name = raw_title if raw_title else channel
+
+        items: list[CollectedItem] = []
+        for entry in feed.get("entries", []):
+            items.append(
+                CollectedItem(
+                    title=entry.get("title", ""),
+                    url=entry.get("link", ""),
+                    body=entry.get("summary", ""),
+                    source_type=self.source_type,  # "video"
+                    source_name="YouTube",
+                    author=entry.get("author"),
+                    published_at=entry.get("published"),
+                    language=None,
+                    content_type="video",
+                    channel=channel_name,
+                )
+            )
+        return items
