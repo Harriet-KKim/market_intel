@@ -23,11 +23,16 @@ def _make_config(**overrides):
     )
 
 
-def _make_scheduler(config=None, registry=None, pipeline=None):
+def _make_scheduler(config=None, registry=None, pipeline=None, refinement_pipeline=None):
     config = config or _make_config()
     registry = registry or MagicMock()
     pipeline = pipeline or MagicMock()
-    scheduler = IntelScheduler(config=config, registry=registry, pipeline=pipeline)
+    scheduler = IntelScheduler(
+        config=config,
+        registry=registry,
+        pipeline=pipeline,
+        refinement_pipeline=refinement_pipeline,
+    )
     return scheduler
 
 
@@ -178,3 +183,146 @@ def test_scheduler_skips_youtube_discovery_when_disabled():
 
     mock_youtube.fetch_channel_videos.assert_not_called()
     pipeline.process_item.assert_not_called()
+
+
+# ---------- L20: weekly refinement cron ----------
+
+import logging
+from datetime import date
+
+from src.scheduler.scheduler import _day_to_cron, _compute_previous_week
+
+
+def test_day_to_cron_accepts_full_weekday_name():
+    assert _day_to_cron("monday") == "mon"
+    assert _day_to_cron("WEDNESDAY") == "wed"
+    assert _day_to_cron("Sunday") == "sun"
+
+
+def test_day_to_cron_accepts_short_form():
+    assert _day_to_cron("mon") == "mon"
+    assert _day_to_cron("FRI") == "fri"
+
+
+def test_day_to_cron_rejects_unknown_value():
+    import pytest
+
+    with pytest.raises(ValueError, match="Unknown weekday"):
+        _day_to_cron("funday")
+
+
+def test_compute_previous_week_from_monday():
+    """월요일 실행 → 직전 주(월~일)."""
+    week_id, date_range = _compute_previous_week(date(2026, 4, 13))
+    assert week_id == "2026-W15"
+    assert date_range == "2026-04-06 ~ 2026-04-12"
+
+
+def test_compute_previous_week_from_wednesday():
+    """수요일 실행 → 같은 '직전 주(월~일)' 결과."""
+    week_id, date_range = _compute_previous_week(date(2026, 4, 15))
+    assert week_id == "2026-W15"
+    assert date_range == "2026-04-06 ~ 2026-04-12"
+
+
+def test_scheduler_registers_refinement_cron_when_enabled():
+    """L20: enabled=True + refinement_pipeline 주입 시 cron 잡 등록."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    config = _make_config()
+    config.refinery.enabled = True
+    config.refinery.schedule_day = "monday"
+    config.refinery.schedule_hour = 9
+    config.refinery.schedule_minute = 0
+
+    refinement_pipeline = MagicMock()
+    scheduler = _make_scheduler(config=config, refinement_pipeline=refinement_pipeline)
+    scheduler._register_jobs()
+
+    jobs = {job.id: job for job in scheduler._scheduler.get_jobs()}
+    assert "collection_cycle" in jobs
+    assert "refinement_cycle" in jobs
+
+    cron = jobs["refinement_cycle"].trigger
+    assert isinstance(cron, CronTrigger)
+    fields = {f.name: str(f) for f in cron.fields}
+    assert fields["day_of_week"] == "mon"
+    assert fields["hour"] == "9"
+    assert fields["minute"] == "0"
+
+
+def test_scheduler_skips_refinement_cron_when_disabled():
+    """L20: enabled=False이면 cron 잡 미등록."""
+    config = _make_config()
+    config.refinery.enabled = False
+
+    refinement_pipeline = MagicMock()
+    scheduler = _make_scheduler(config=config, refinement_pipeline=refinement_pipeline)
+    scheduler._register_jobs()
+
+    jobs = {job.id for job in scheduler._scheduler.get_jobs()}
+    assert "refinement_cycle" not in jobs
+    assert "collection_cycle" in jobs
+
+
+def test_scheduler_skips_refinement_cron_when_pipeline_missing(caplog):
+    """L20: refinement_pipeline=None이면 enabled여도 등록하지 않고 warning 로그."""
+    config = _make_config()
+    config.refinery.enabled = True
+
+    scheduler = _make_scheduler(config=config, refinement_pipeline=None)
+
+    with caplog.at_level(logging.WARNING, logger="src.scheduler.scheduler"):
+        scheduler._register_jobs()
+
+    jobs = {job.id for job in scheduler._scheduler.get_jobs()}
+    assert "refinement_cycle" not in jobs
+    assert any("refinement_pipeline not provided" in rec.message for rec in caplog.records)
+
+
+def test_run_refinement_cycle_calls_pipeline_with_previous_week(tmp_path):
+    """L20: _run_refinement_cycle이 직전 주 week_id/date_range로 pipeline.run 호출."""
+    config = _make_config()
+    config.vault_path = tmp_path
+    (tmp_path / "raw" / "2026-04-06").mkdir(parents=True)
+
+    refinement_pipeline = MagicMock()
+    scheduler = _make_scheduler(config=config, refinement_pipeline=refinement_pipeline)
+
+    scheduler._run_refinement_cycle(today=date(2026, 4, 13))
+
+    refinement_pipeline.run.assert_called_once_with(
+        week="2026-W15", date_range="2026-04-06 ~ 2026-04-12"
+    )
+
+
+def test_run_refinement_cycle_skips_when_no_raw_data(tmp_path, caplog):
+    """L20: 대상 주의 raw 폴더가 하나도 없으면 pipeline 미호출 + warning."""
+    config = _make_config()
+    config.vault_path = tmp_path
+    (tmp_path / "raw").mkdir()
+
+    refinement_pipeline = MagicMock()
+    scheduler = _make_scheduler(config=config, refinement_pipeline=refinement_pipeline)
+
+    with caplog.at_level(logging.WARNING, logger="src.scheduler.scheduler"):
+        scheduler._run_refinement_cycle(today=date(2026, 4, 13))
+
+    refinement_pipeline.run.assert_not_called()
+    assert any("no raw data" in rec.message for rec in caplog.records)
+
+
+def test_run_refinement_cycle_isolates_pipeline_exception(tmp_path, caplog):
+    """L20: pipeline.run이 예외를 던져도 스케줄러가 크래시하지 않고 logger.exception 기록."""
+    config = _make_config()
+    config.vault_path = tmp_path
+    (tmp_path / "raw" / "2026-04-06").mkdir(parents=True)
+
+    refinement_pipeline = MagicMock()
+    refinement_pipeline.run.side_effect = RuntimeError("step 2 LLM quota exceeded")
+    scheduler = _make_scheduler(config=config, refinement_pipeline=refinement_pipeline)
+
+    with caplog.at_level(logging.ERROR, logger="src.scheduler.scheduler"):
+        scheduler._run_refinement_cycle(today=date(2026, 4, 13))
+
+    assert any("Refinement failed" in rec.message for rec in caplog.records)
