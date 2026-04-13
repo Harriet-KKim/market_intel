@@ -162,6 +162,7 @@ pytest config는 `pyproject.toml`에 인라인(`testpaths = ["tests"]`, `pythonp
 | L5 | `src/config.py` + `src/scheduler/scheduler.py` + `config.yaml` | `CollectionConfig.timezone` 필드 신설 (기본 `Asia/Seoul`), `BlockingScheduler(timezone=ZoneInfo(...))` 주입. `test_scheduler_uses_configured_timezone` 외 config/scheduler 테스트 4개 추가 |
 | L14 | `tests/test_source_sns.py` | `monkeypatch.setattr("httpx.get", ...)`로 Reddit `search.json` 응답 stub. 정상 파싱 / 빈 결과 / non-200 테스트 3개 추가 |
 | L6 | `src/sources/youtube.py` + `src/scheduler/scheduler.py` | `YoutubeSource.fetch_channel_videos` 신설 — YouTube 공개 Atom 피드(`feeds/videos.xml?channel_id=...`)를 feedparser로 파싱해 최신 ~15개 비디오의 title/description/link 를 `CollectedItem` 으로 방출. `_normalize_channel_to_feed_url` 이 UC 24자 channel_id 와 full feed URL 두 형태를 수용, `@handle`은 의도적 미지원(MVP). 스케줄러 YouTube 분기를 RSS/Web 과 동일한 outer/inner try 패턴으로 재작성해 fetch 결과를 `CollectionPipeline.process_item`에 흘려보냄. Transcript 추출은 기존 `fetch_from_url` opt-in 경로로 보존. 유닛 테스트 7개 + 스케줄러 통합 테스트 2개 추가 |
+| L20 | `src/config.py` + `src/scheduler/scheduler.py` + `src/main.py` + `config.yaml` | 기존에 사장되어 있던 `RefineryConfig`를 활용해 `IntelScheduler`에 주간 정제 cron 잡 등록. `_day_to_cron` 으로 "monday"/"mon" 양쪽을 수용하고, `_compute_previous_week` 헬퍼가 실행 요일과 무관하게 "직전 주(월~일)" 을 자동 계산. 빈 raw 가드·예외 격리·`enabled` 플래그로 안전장치 확보. `main.py schedule` 하나로 interval 수집 + 주간 정제가 함께 실행된다. config 테스트 3개 + scheduler 테스트 11개 추가 |
 
 ### 알려진 한계 (Not Fixed — 구현·운영 중 주의)
 
