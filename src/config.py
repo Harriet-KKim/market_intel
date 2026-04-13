@@ -29,6 +29,8 @@ class CollectionConfig:
 class RefineryConfig:
     schedule_day: str
     schedule_hour: int
+    enabled: bool = True
+    schedule_minute: int = 0
 
 
 @dataclass
@@ -103,6 +105,8 @@ def load_config(path: Path) -> AppConfig:
         refinery=RefineryConfig(
             schedule_day=data["refinery"]["schedule_day"],
             schedule_hour=data["refinery"]["schedule_hour"],
+            enabled=data["refinery"].get("enabled", True),
+            schedule_minute=data["refinery"].get("schedule_minute", 0),
         ),
         api_keys=ApiKeysConfig(
             gemini=data["api_keys"]["gemini"],

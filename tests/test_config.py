@@ -185,3 +185,95 @@ budget:
 
     assert config.api_keys.gemini == "env-gemini-key"
     assert config.api_keys.openai == "direct-key"
+
+
+def test_load_config_refinery_enabled_defaults_to_true(tmp_path):
+    """L20: refinery.enabled defaults to True when omitted."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("""
+vault_path: "./vault"
+collection:
+  interval_hours: 6
+  sources:
+    rss: true
+    web: true
+    sns: true
+    youtube: true
+refinery:
+  schedule_day: "monday"
+  schedule_hour: 9
+api_keys:
+  gemini: "k1"
+  openai: "k2"
+  anthropic: "k3"
+budget:
+  enabled: false
+  daily_limit_usd: 10.0
+""")
+    from src.config import load_config
+
+    config = load_config(config_file)
+    assert config.refinery.enabled is True
+    assert config.refinery.schedule_minute == 0
+
+
+def test_load_config_refinery_enabled_explicit_false(tmp_path):
+    """L20: refinery.enabled can be disabled explicitly."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("""
+vault_path: "./vault"
+collection:
+  interval_hours: 6
+  sources:
+    rss: true
+    web: true
+    sns: true
+    youtube: true
+refinery:
+  enabled: false
+  schedule_day: "monday"
+  schedule_hour: 9
+  schedule_minute: 30
+api_keys:
+  gemini: "k1"
+  openai: "k2"
+  anthropic: "k3"
+budget:
+  enabled: false
+  daily_limit_usd: 10.0
+""")
+    from src.config import load_config
+
+    config = load_config(config_file)
+    assert config.refinery.enabled is False
+    assert config.refinery.schedule_minute == 30
+
+
+def test_load_config_refinery_passthrough_day_string(tmp_path):
+    """L20: schedule_day is passed through and normalized later by the scheduler."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("""
+vault_path: "./vault"
+collection:
+  interval_hours: 6
+  sources:
+    rss: true
+    web: true
+    sns: true
+    youtube: true
+refinery:
+  schedule_day: "wed"
+  schedule_hour: 14
+api_keys:
+  gemini: "k1"
+  openai: "k2"
+  anthropic: "k3"
+budget:
+  enabled: false
+  daily_limit_usd: 10.0
+""")
+    from src.config import load_config
+
+    config = load_config(config_file)
+    assert config.refinery.schedule_day == "wed"
+    assert config.refinery.schedule_hour == 14
