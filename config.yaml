@@ -9,8 +9,15 @@ collection:
     sns: true
     youtube: true
 refinery:
+  # 로컬 패치 L20: IntelScheduler가 이 섹션을 참조해 주간 정제 cron 잡을 등록한다.
+  # enabled=false 로 두면 수동 CLI(`main.py refine`)로만 실행됨.
+  # 주의: L1(프로필 덮어쓰기) 미해결 상태에서 활성화하면 수동 편집한 vault/companies/*.md,
+  # vault/topics/*.md 가 다음 주 실행 시 통째로 덮어씌워질 수 있음.
+  # 일요일 실행은 '진행 중인 주'가 아니라 '저번 주'를 타깃하므로 월~토 권장.
+  enabled: true
   schedule_day: "monday"
   schedule_hour: 9
+  schedule_minute: 0
 api_keys:
   gemini: "${GEMINI_API_KEY}"
   openai: "${OPENAI_API_KEY}"

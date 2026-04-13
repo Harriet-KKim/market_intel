@@ -215,7 +215,23 @@ def main():
             gateway=gateway, tagging_model="gemini",
             registry=registry, dedup=dedup, raw_writer=raw_writer,
         )
-        scheduler = IntelScheduler(config=config, registry=registry, pipeline=collection_pipeline)
+        # 로컬 패치 L20: 주간 정제 자동화. config.refinery.enabled=True일 때만
+        # IntelScheduler가 cron 잡을 등록한다. 구성 비용은 gateway/registry/vault를
+        # 이미 만들어뒀으므로 미미하다.
+        refinement_pipeline = RefinementPipeline(
+            gateway=gateway,
+            consolidation_model="gpt5-pro",
+            summarization_model="claude-opus",
+            review_model="gpt5-pro",
+            vault=vault,
+            registry=registry,
+        )
+        scheduler = IntelScheduler(
+            config=config,
+            registry=registry,
+            pipeline=collection_pipeline,
+            refinement_pipeline=refinement_pipeline,
+        )
         scheduler.start()
 
 
